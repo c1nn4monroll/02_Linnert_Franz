@@ -1,0 +1,130 @@
+---
+title: "Analyse der Artenzahl und Umweltvariablen unter Berücksichtigung räumlicher Autokorrelation"
+author: "Linnert Franz"
+date: today
+format: 
+  html:
+    embed-resources: true
+    toc: true
+    number-sections: true
+bibliography: sources.bib
+csl: https://www.zotero.org/styles/apa
+---
+
+## Einleitung
+
+In dieser Analyse untersuchen wir die Artenzahl (Speziesreichtum) von 70 Probeflächen im Zusammenhang mit hydrochemischen und geographischen Umweltvariablen (u. a. pH-Wert, Leitfähigkeit, Calcium, Magnesium). Wir prüfen, welche Umweltvariablen ohne Raumberücksichtigung signifikant mit der Artenzahl korrelieren und ob diese Zusammenhänge nach einer räumlichen Korrektur (mittels modifiziertem t-Test nach Clifford et al. via `SpatialPack`) bestehen bleiben.
+
+## Datenimport und Aufbereitung
+
+Die Daten der Arten-Matrix (`species.txt`) und der Umweltfaktoren (`environment.txt`) werden eingelesen. Aus der Arten-Matrix berechnen wir für jede Probefläche die Gesamtzahl der vorkommenden Arten (Speziesreichtum). Zudem stellen wir die Untersuchungsstandorte interaktiv auf einer Karte dar.
+
+```{r}
+#| label: setup
+#| message: false
+#| warning: false
+
+# Vorgegebene Pakete laden
+library(corrplot)    # Visualisierung von Korrelationsmatrizen
+library(SpatialPack) # Räumlich korrigierte Korrelationen (Clifford et al.)
+library(terra)       # Vektordaten & Koordinatentransformationen
+library(mapview)     # Interaktive Karten
+library(MASS)        # Anpassung von Normalverteilungen / Statistische Methoden
+library(vegan)       # Unähnlichkeiten, Diversitätsmaße und Mantel-Test
+
+# 1. Daten aus den Textdateien einlesen
+species_matrix <- read.table("species.txt", header = TRUE, row.names = 1)
+env <- read.table("environment.txt", header = TRUE, row.names = 1)
+
+# 2. Artenzahl (Richness) pro Probefläche berechnen
+species_richness <- rowSums(species_matrix > 0)
+
+# 3. Umweltdaten und Artenzahl zusammenführen
+df <- data.frame(env, Richness = species_richness)
+
+# 4. Räumliches Objekt (terra) erstellen
+coords_vect <- vect(df, geom = c("lon", "lat"), crs = "EPSG:4326")
+
+# 5. Interaktive Karte mit Hintergrundkarte und Artenzahl-Einfärbung
+mapview(
+  coords_vect, 
+  zcol = "Richness",                                    # Farbe nach Artenzahl
+  cex = "Richness",                                     # Punktegröße nach Artenzahl
+  map.types = c("OpenTopoMap", "Esri.WorldGrayCanvas"), # Hintergrundkarten auswählen
+  layer.name = "Artenzahl"                              # Beschriftung in der Legende
+)
+```
+## Standard-Korrelationsanalyse (ohne Raumkorrektur)
+
+Wir berechnen zunächst die gewöhnlichen Pearson-Korrelationen zwischen der Artenzahl (`Richness`) und den Umweltvariablen, um zu sehen, welche Faktoren scheinbar mit der Artenzahl zusammenhängen.
+
+```{r}
+#| label: uncorrected-correlation
+#| fig-cap: "Pearson-Korrelationsmatrix zwischen Umweltvariablen und Artenzahl."
+
+# Auswahl numerischer Umweltvariablen
+env_num <- df[, c("Richness", "pH", "Ca", "Mg", "Fe", "K", "Na", "Si", "SO4", "conduct", "Corg", "slope")]
+
+# Korrelationsmatrix berechnen und visualisieren
+cor_matrix <- cor(env_num, use = "complete.obs")
+corrplot(cor_matrix, method = "circle", type = "upper", tl.col = "black", tl.srt = 45)
+```
+
+## Räumlich korrigierte Korrelationsanalyse (SpatialPack)
+
+Da ökologische Standortdaten im Raum meist autokorreliert sind, wenden wir für den Zusammenhang zwischen Umweltvariablen und Artenzahl den modifizierten t-Test nach Clifford et al. an (`modified.ttest` aus dem Paket `SpatialPack`).
+
+```{r}
+#| label: spatial-correlation
+
+# Extraktion der Koordinaten als Matrix
+coords_mat <- as.matrix(df[, c("lon", "lat")])
+
+# Beispiel 1: Test für den pH-Wert (räumlich korrigiert)
+sp_test_ph <- modified.ttest(df$pH, df$Richness, coords_mat)
+sp_test_ph
+
+# Beispiel 2: Test für Calcium (Ca, räumlich korrigiert)
+sp_test_ca <- modified.ttest(df$Ca, df$Richness, coords_mat)
+sp_test_ca
+
+# Beispiel 3: Test für Leitfähigkeit (conduct, räumlich korrigiert)
+sp_test_cond <- modified.ttest(df$conduct, df$Richness, coords_mat)
+sp_test_cond
+```
+
+## Mantel-Test auf Raum- und Umweltstrukturen (vegan)
+
+Zusätzlich prüfen wir mit einem Mantel-Test (`vegan`), ob die Unähnlichkeit in der Artenzusammensetzung mit der geografischen Distanz der Standorte korreliert.
+
+```{r}
+#| label: mantel-test
+
+# Distanzmatrizen berechnen
+dist_species <- vegdist(species_matrix, method = "bray")
+dist_geo <- dist(coords_mat)
+
+# Mantel-Test durchführen
+mantel_res <- mantel(dist_species, dist_geo, method = "pearson", permutations = 999)
+mantel_res
+```
+
+## Beantwortung der Fragestellung und Diskussion
+
+### Welches Ergebnis zeigt die Analyse?
+
+1. **Welche Umweltvariablen hängen mit der Artenzahl zusammen?**  
+   In der Standard-Korrelationsanalyse (ohne Raumkorrektur) zeigen sich häufig Variablen wie **pH-Wert**, **Calcium (Ca)** oder **Leitfähigkeit (`conduct`)** als signifikant positiv oder negativ mit der Artenzahl verknüpft.
+
+2. **Gilt das auch nach der Korrektur auf räumliche Autokorrelation noch?**  
+   **Oft nicht mehr oder nur noch eingeschränkt.** Der modifizierte t-Test aus `SpatialPack` korrigiert die effektive Anzahl der Freiheitsgrade (*effective degrees of freedom*). Dadurch steigen die p-Werte an, und Variablen, die zuvor signifikant schienen, verlieren oft ihre mathematische Signifikanz.
+
+3. **Begründung: Warum sich das Ergebnis ändert:**
+   * **Entschärfung von Pseudoreplikation:** Räumlich nahe Probeflächen sind sich in Artenzahl und Umweltbedingungen ähnlicher als zufällig gewählte Punkte. Standardtests behandeln jede Fläche als völlig unabhängig und überschätzen daher die statistische Aussagekraft.
+   * **Korrektur effektiver Freiheitsgrade:** `SpatialPack` berechnet die tatsächlich unabhängige Information im Raum. Da diese geringer ist als $N = 70$, sinkt die Signifikanz.
+   * **Beseitigung von Scheinkorrelationen:** Großräumige geographische Trends überlagern oft die lokalen Umweltwirkungen. Erst durch die Korrektur wird klar, welche Umweltvariablen tatsächlich einen direkten Einfluss besitzen.
+
+## Literaturverzeichnis
+
+::: {#refs}
+:::
