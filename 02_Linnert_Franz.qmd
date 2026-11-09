@@ -7,7 +7,7 @@ format:
     embed-resources: true
     toc: true
     number-sections: true
-bibliography: sources.bib
+bibliography: 02_Linnert_Franz.bib
 csl: https://www.zotero.org/styles/apa
 ---
 
