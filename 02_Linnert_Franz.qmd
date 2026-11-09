@@ -1,6 +1,6 @@
 ---
 title: "Analyse der Artenzahl und Umweltvariablen unter Berücksichtigung räumlicher Autokorrelation"
-author: "Linnert Franz"
+author: "Valerie Linnert und Mia Lelia Franz"
 date: today
 format: 
   html:
@@ -13,11 +13,11 @@ csl: https://www.zotero.org/styles/apa
 
 ## Einleitung
 
-In dieser Analyse untersuchen wir die Artenzahl (Speziesreichtum) von 70 Probeflächen im Zusammenhang mit hydrochemischen und geographischen Umweltvariablen (u. a. pH-Wert, Leitfähigkeit, Calcium, Magnesium). Wir prüfen, welche Umweltvariablen ohne Raumberücksichtigung signifikant mit der Artenzahl korrelieren und ob diese Zusammenhänge nach einer räumlichen Korrektur (mittels modifiziertem t-Test nach Clifford et al. via `SpatialPack`) bestehen bleiben.
+In dieser Analyse untersuchen wir den Speziesreichtum (Artenzahl) von 70 Probeflächen in Quellmooren der Westkarpaten [@hajek2002spring] in Abhängigkeit von hydrochemischen und geographischen Umweltvariablen (u. a. pH-Wert, elektrische Leitfähigkeit, Calcium und Magnesium). Wir prüfen, welche Umweltfaktoren ohne Berücksichtigung der räumlichen Komponente signifikant mit der Artenzahl korrelieren und ob diese Zusammenhänge auch nach einer Korrektur für räumliche Autokorrelation (mittels des modifizierten $t$-Tests nach @dutilleul1993modifying  via `SpatialPack`) bestehen bleiben.
 
 ## Datenimport und Aufbereitung
 
-Die Daten der Arten-Matrix (`species.txt`) und der Umweltfaktoren (`environment.txt`) werden eingelesen. Aus der Arten-Matrix berechnen wir für jede Probefläche die Gesamtzahl der vorkommenden Arten (Speziesreichtum). Zudem stellen wir die Untersuchungsstandorte interaktiv auf einer Karte dar.
+Die Daten der Arten-Matrix (`species.txt`) und der Umweltfaktoren (`environment.txt`) werden eingelesen. Aus der Arten-Matrix berechnen wir für jede Probefläche die Gesamtzahl der vorkommenden Arten (Speziesreichtum). Zusätzlich stellen wir die Untersuchungsstandorte interaktiv auf einer Karte dar.
 
 ```{r}
 #| label: setup
@@ -25,18 +25,18 @@ Die Daten der Arten-Matrix (`species.txt`) und der Umweltfaktoren (`environment.
 #| warning: false
 
 # Vorgegebene Pakete laden
-library(corrplot)    # Visualisierung von Korrelationsmatrizen
-library(SpatialPack) # Räumlich korrigierte Korrelationen (Clifford et al.)
-library(terra)       # Vektordaten & Koordinatentransformationen
-library(mapview)     # Interaktive Karten
-library(MASS)        # Anpassung von Normalverteilungen / Statistische Methoden
-library(vegan)       # Unähnlichkeiten, Diversitätsmaße und Mantel-Test
+library(corrplot)       # to create correlation plots
+library(SpatialPack)    # to calculate spatially-corrected correlation significance
+library(terra)          # for creating georeferenced vector objects and coordinate transformations
+library(mapview)        # to create interactive maps
+library(MASS)           # to fit normal distributions to the data
+library(vegan)          # to calculate dissimilarities and the Mantel test
 
 # 1. Daten aus den Textdateien einlesen
 species_matrix <- read.table("species.txt", header = TRUE, row.names = 1)
 env <- read.table("environment.txt", header = TRUE, row.names = 1)
 
-# 2. Artenzahl (Richness) pro Probefläche berechnen
+# 2. Artenzahl pro Probefläche berechnen
 species_richness <- rowSums(species_matrix > 0)
 
 # 3. Umweltdaten und Artenzahl zusammenführen
@@ -72,7 +72,7 @@ corrplot(cor_matrix, method = "circle", type = "upper", tl.col = "black", tl.srt
 
 ## Räumlich korrigierte Korrelationsanalyse (SpatialPack)
 
-Da ökologische Standortdaten im Raum meist autokorreliert sind, wenden wir für den Zusammenhang zwischen Umweltvariablen und Artenzahl den modifizierten t-Test nach Clifford et al. an (`modified.ttest` aus dem Paket `SpatialPack`).
+Da ökologische Standortdaten im Raum meist autokorreliert sind, wenden wir für den Zusammenhang zwischen Umweltvariablen und Artenzahl den modifizierten t-Test nach @dutilleul1993modifying an (`modified.ttest` aus dem Paket `SpatialPack`).
 
 ```{r}
 #| label: spatial-correlation
@@ -95,7 +95,7 @@ sp_test_cond
 
 ## Mantel-Test auf Raum- und Umweltstrukturen (vegan)
 
-Zusätzlich prüfen wir mit einem Mantel-Test (`vegan`), ob die Unähnlichkeit in der Artenzusammensetzung mit der geografischen Distanz der Standorte korreliert.
+Zusätzlich prüfen wir mit einem Mantel-Test aus dem Paket `vegan`, ob die Unähnlichkeit in der Artenzusammensetzung mit der geografischen Distanz der Standorte korreliert. Damit testen wir die von @legendre2012numerical beschriebene räumliche Strukturierung ökologischer Gemeinschaften (*Isolation by Distance*).
 
 ```{r}
 #| label: mantel-test
@@ -117,12 +117,14 @@ mantel_res
    In der Standard-Korrelationsanalyse (ohne Raumkorrektur) zeigen sich häufig Variablen wie **pH-Wert**, **Calcium (Ca)** oder **Leitfähigkeit (`conduct`)** als signifikant positiv oder negativ mit der Artenzahl verknüpft.
 
 2. **Gilt das auch nach der Korrektur auf räumliche Autokorrelation noch?**  
-   **Oft nicht mehr oder nur noch eingeschränkt.** Der modifizierte t-Test aus `SpatialPack` korrigiert die effektive Anzahl der Freiheitsgrade (*effective degrees of freedom*). Dadurch steigen die p-Werte an, und Variablen, die zuvor signifikant schienen, verlieren oft ihre mathematische Signifikanz.
+   Oft nicht mehr oder nur noch eingeschränkt. Der modifizierte t-Test aus `SpatialPack` korrigiert die effektive Anzahl der Freiheitsgrade (*effective degrees of freedom*). Dadurch steigen die p-Werte an, und Variablen, die zuvor signifikant schienen, verlieren oft ihre mathematische Signifikanz.
 
 3. **Begründung: Warum sich das Ergebnis ändert:**
-   * **Entschärfung von Pseudoreplikation:** Räumlich nahe Probeflächen sind sich in Artenzahl und Umweltbedingungen ähnlicher als zufällig gewählte Punkte. Standardtests behandeln jede Fläche als völlig unabhängig und überschätzen daher die statistische Aussagekraft.
+   * **Replikation und Pseudoreplikation:** Räumlich nahe Probeflächen sind sich in Artenzahl und Umweltbedingungen ähnlicher als zufällig gewählte Punkte. Standardtests behandeln jede Fläche als völlig unabhängig und überschätzen daher die statistische Aussagekraft.
    * **Korrektur effektiver Freiheitsgrade:** `SpatialPack` berechnet die tatsächlich unabhängige Information im Raum. Da diese geringer ist als $N = 70$, sinkt die Signifikanz.
    * **Beseitigung von Scheinkorrelationen:** Großräumige geographische Trends überlagern oft die lokalen Umweltwirkungen. Erst durch die Korrektur wird klar, welche Umweltvariablen tatsächlich einen direkten Einfluss besitzen.
+
+Hinweis zur Verwendung von KI: Bei der Erstellung und Formatierung dieses Skripts wurde KI als Hilfestellung für R-Syntax und Markdown-Strukturierung verwendet.
 
 ## Literaturverzeichnis
 
